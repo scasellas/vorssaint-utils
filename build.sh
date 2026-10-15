@@ -35,12 +35,15 @@ progress_start() {
     local stamp="$dir/.progress-start"
     : > "$stamp"
     {
-        local started=$SECONDS compiled filled elapsed bar width=30
+        local started=$SECONDS compiled filled elapsed bar i width=30
         while true; do
             compiled=$(find "$dir" -name '*.o' -newer "$stamp" 2>/dev/null | wc -l | tr -d ' ' || true)
             (( compiled > total )) && compiled=$total
             filled=$(( total > 0 ? compiled * width / total : 0 ))
-            bar="${(l:filled::#:)}${(l:width - filled::-:)}"
+            bar=""
+            for (( i = 0; i < width; i++ )); do
+                if (( i < filled )); then bar+="#"; else bar+="-"; fi
+            done
             elapsed=$(( SECONDS - started ))
             printf '\r\033[K  [%s] %d/%d files  %dm%02ds' \
                 "$bar" "$compiled" "$total" $(( elapsed / 60 )) $(( elapsed % 60 ))
