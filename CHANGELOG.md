@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows
 The window switcher offers column limits and clearer app filtering. Screenshots copy text, recordings export longer GIFs and isolate window audio, and mixer sliders follow perceived loudness. AI Agents supports OpenCode 2 and safer Claude renewal estimates. Dynamic Island improves lyrics, companion playback and keyboard focus. Command Bar opens and searches faster. Clipboard history leaves sensitive-text guessing off by default. Cleaning Mode keeps input taps suspended, alongside fixes for clipboard pastes, display brightness, recording, app updates, Homebrew installs, volume keys, mouse navigation, Dock instances and M4 Pro temperatures.
 
 ### Added
+- Vorssaint runs on Intel Macs. Releases are universal binaries, and the System monitor and Fan Control read Intel CPU and GPU temperature sensors.
 - Dynamic Island can show the keyboard input source when it changes. Command Bar's temporary layout switches stay quiet. Settings → Dynamic Island → Activity → Indicators.
 - The window switcher can limit how many items sit in a row and wraps the rest. Settings → Window switcher → Options → Maximum columns.
 - Screenshot previews can copy the text in a capture when Screen OCR is installed.
