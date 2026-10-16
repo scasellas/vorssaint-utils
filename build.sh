@@ -14,12 +14,52 @@ cd "$(dirname "$0")"
 # the script ends.
 ICON_TMP=""
 STAGE_TMP=""
+PROGRESS_PID=""
 
 cleanup() {
+    progress_stop
     [[ -n "$ICON_TMP" ]] && rm -rf "$ICON_TMP"
     [[ -n "$STAGE_TMP" ]] && rm -rf "$STAGE_TMP"
     return 0
 }
+
+# A compile of the whole app runs for minutes without printing anything, so
+# while it runs a line under it shows how many object files it has written
+# since it started, out of the sources it may compile, and the time spent.
+# An incremental build recompiles only what changed, so it can finish well
+# short of the total. Only drawn on a terminal; CI logs stay as they were.
+progress_start() {
+    local dir="$1" total="$2"
+    PROGRESS_PID=""
+    [[ -t 1 ]] || return 0
+    local stamp="$dir/.progress-start"
+    : > "$stamp"
+    {
+        local started=$SECONDS compiled filled elapsed bar i width=30
+        while true; do
+            compiled=$(find "$dir" -name '*.o' -newer "$stamp" 2>/dev/null | wc -l | tr -d ' ' || true)
+            (( compiled > total )) && compiled=$total
+            filled=$(( total > 0 ? compiled * width / total : 0 ))
+            bar=""
+            for (( i = 0; i < width; i++ )); do
+                if (( i < filled )); then bar+="#"; else bar+="-"; fi
+            done
+            elapsed=$(( SECONDS - started ))
+            printf '\r\033[K  [%s] %d/%d files  %dm%02ds' \
+                "$bar" "$compiled" "$total" $(( elapsed / 60 )) $(( elapsed % 60 ))
+            sleep 1
+        done
+    } &!
+    PROGRESS_PID=$!
+}
+
+progress_stop() {
+    [[ -n "$PROGRESS_PID" ]] || return 0
+    kill "$PROGRESS_PID" 2>/dev/null || true
+    PROGRESS_PID=""
+    printf '\r\033[K'
+}
+
 trap cleanup EXIT
 # zsh runs the EXIT trap when the script is hung up, but not when it is
 # interrupted or terminated; route those through exit so a Ctrl-C partway
@@ -576,10 +616,12 @@ if (( TEST )); then
     TEST_OUTPUT_FILE_MAP="$TEST_OBJECT_DIR/output-file-map.json"
     write_swift_output_file_map "$TEST_OUTPUT_FILE_MAP" "$TEST_OBJECT_DIR" "${TEST_SOURCES[@]}"
     echo "▸ Building & running tests against $(basename "$SDK")…"
+    progress_start "$TEST_OBJECT_DIR" ${#TEST_SOURCES}
     swiftc -Onone -incremental -enable-batch-mode -j "$(sysctl -n hw.logicalcpu)" \
         -module-name VorssaintTests -output-file-map "$TEST_OUTPUT_FILE_MAP" \
         -target "$TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" \
         "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${TEST_SOURCES[@]}" -o build/metrics-tests
+    progress_stop
     test_status=0
     ./build/metrics-tests "${TEST_ARGS[@]}" || test_status=$?
     if (( ${#TEST_ARGS} == 0 )); then
@@ -630,11 +672,13 @@ for arch in "${ARCHS[@]}"; do
     # each file's compiler parses the whole module again: a clean release took a
     # quarter of an hour. Batches share that work and run on every core, and the
     # optimization stays per file, as before.
+    progress_start "$APP_OBJECT_DIR" ${#APP_SOURCES}
     swiftc "${APP_OPTIMIZATION_FLAGS[@]}" -incremental -enable-batch-mode -j "$(sysctl -n hw.logicalcpu)" \
         -output-file-map "$APP_OUTPUT_FILE_MAP" \
         -target "$ARCH_TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${VM_STATISTICS_COMPAT_FLAGS[@]}" "${HID_EVENT_SYSTEM_FLAGS[@]}" \
         "${BUILD_VARIANT_FLAGS[@]}" \
         "${APP_SOURCES[@]}" -o "build/$arch/$EXECUTABLE"
+    progress_stop
 
     echo "▸ Compiling protected fan helper ($arch)…"
     swiftc -O -target "$ARCH_TARGET" -sdk "$SDK" "${SDK_COMPAT_FLAGS[@]}" "${BUILD_VARIANT_FLAGS[@]}" \
